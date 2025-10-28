@@ -11,6 +11,23 @@
             <span v-else>Spel inaktivt</span>
           </div>
           
+          <!-- Quiz-info -->
+          <div v-if="gameState.currentQuiz" class="quiz-info">
+            <strong>🎯 Aktuellt quiz:</strong>
+            <p class="quiz-name">{{ gameState.currentQuiz.name }}</p>
+            <div class="quiz-progress-bar">
+              <div class="quiz-progress-text">
+                Fråga {{ gameState.currentQuiz.currentQuestionIndex }} av {{ gameState.currentQuiz.totalQuestions }}
+              </div>
+              <div class="progress-bar-container">
+                <div 
+                  class="progress-bar-fill" 
+                  :style="{ width: (gameState.currentQuiz.currentQuestionIndex / gameState.currentQuiz.totalQuestions * 100) + '%' }"
+                ></div>
+              </div>
+            </div>
+          </div>
+          
           <div v-if="gameState.currentQuestion" class="current-question">
             <strong>Aktuell fråga:</strong>
             <p>{{ gameState.currentQuestion.question }}</p>
@@ -457,6 +474,43 @@ export default {
   color: #374151;
   margin: 0.5rem 0;
   font-style: italic;
+}
+
+.quiz-info {
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+}
+
+.quiz-name {
+  color: #667eea;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.quiz-progress-bar {
+  margin-top: 0.75rem;
+}
+
+.quiz-progress-text {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar-container {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #10b981);
+  border-radius: 3px;
+  transition: width 0.5s ease;
 }
 
 .question-timer {

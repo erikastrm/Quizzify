@@ -1,6 +1,19 @@
 <template>
   <div class="quiz-question">
     <div class="card">
+      <!-- Quiz progress (om det är ett quiz) -->
+      <div v-if="question.questionNumber && question.totalQuestions" class="quiz-progress">
+        <div class="progress-text">
+          Fråga {{ question.questionNumber }} av {{ question.totalQuestions }}
+        </div>
+        <div class="progress-bar">
+          <div 
+            class="progress-fill" 
+            :style="{ width: (question.questionNumber / question.totalQuestions * 100) + '%' }"
+          ></div>
+        </div>
+      </div>
+
       <!-- Timer och kategori -->
       <div class="question-header">
         <div class="timer" :class="{ urgent: timeLeft <= 5 }">
@@ -182,6 +195,34 @@ export default {
 .quiz-question {
   max-width: 900px;
   margin: 0 auto;
+}
+
+.quiz-progress {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.progress-text {
+  text-align: center;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.progress-bar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #10b981);
+  border-radius: 4px;
+  transition: width 0.5s ease;
 }
 
 .question-header {

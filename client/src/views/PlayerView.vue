@@ -76,6 +76,7 @@ export default {
     const questionResult = ref(null)
     const finalScores = ref([])
     const winner = ref(null)
+    const currentQuizInfo = ref(null) // Quiz-information
 
     /**
      * Anslut till Socket.IO-servern när komponenten monteras
@@ -130,7 +131,20 @@ export default {
       // Spelet har startats
       socketService.on('game_started', () => {
         gamePhase.value = 'waiting'
+        currentQuizInfo.value = null
         showToast('Spelet har startats!', 'info')
+      })
+
+      // Quiz har startats
+      socketService.on('quiz_started', (quizData) => {
+        gamePhase.value = 'waiting'
+        currentQuizInfo.value = quizData
+        showToast(`Quiz "${quizData.quizName}" startat!`, 'info')
+      })
+
+      // Quiz avslutat
+      socketService.on('quiz_completed', (quizData) => {
+        showToast(`Quiz "${quizData.quizName}" avslutat!`, 'success')
       })
 
       // Ny fråga visas

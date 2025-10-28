@@ -77,6 +77,39 @@ class ApiService {
     const response = await this.axiosInstance.delete(`/questions/${id}`)
     return response.data
   }
+
+  /**
+   * Quiz
+   */
+  async getAllQuizzes() {
+    const response = await this.axiosInstance.get('/quizzes')
+    return response.data
+  }
+
+  async getQuizById(id) {
+    const response = await this.axiosInstance.get(`/quizzes/${id}`)
+    return response.data
+  }
+
+  async getQuizQuestions(id) {
+    const response = await this.axiosInstance.get(`/quizzes/${id}/questions`)
+    return response.data
+  }
+
+  async createQuiz(quizData) {
+    const response = await this.axiosInstance.post('/quizzes', quizData)
+    return response.data
+  }
+
+  async updateQuiz(id, quizData) {
+    const response = await this.axiosInstance.put(`/quizzes/${id}`, quizData)
+    return response.data
+  }
+
+  async deleteQuiz(id) {
+    const response = await this.axiosInstance.delete(`/quizzes/${id}`)
+    return response.data
+  }
 }
 
 // Skapa singleton-instans

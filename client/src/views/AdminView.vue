@@ -43,9 +43,16 @@
           :players="players"
           :game-state="gameState"
           @start-game="startGame"
+          @start-quiz="startQuiz"
           @show-question="showQuestion"
           @end-question="endQuestion"
           @end-game="endGame"
+        />
+
+        <!-- Quiz-hantering -->
+        <QuizManager 
+          v-if="activeTab === 'quizzes'"
+          @start-quiz="startQuiz"
         />
 
         <!-- Frågehantering -->
@@ -69,6 +76,7 @@ import apiService from '../services/api'
 import AdminLogin from '../components/AdminLogin.vue'
 import GameControl from '../components/GameControl.vue'
 import QuestionManager from '../components/QuestionManager.vue'
+import QuizManager from '../components/QuizManager.vue'
 import GameHistory from '../components/GameHistory.vue'
 
 export default {
@@ -77,6 +85,7 @@ export default {
     AdminLogin,
     GameControl,
     QuestionManager,
+    QuizManager,
     GameHistory
   },
   setup() {
@@ -97,6 +106,7 @@ export default {
     // Tab-konfiguration
     const tabs = ref([
       { id: 'game', name: 'Spelkontroll', icon: '🎮' },
+      { id: 'quizzes', name: 'Quiz', icon: '🎯' },
       { id: 'questions', name: 'Frågor', icon: '❓' },
       { id: 'history', name: 'Historik', icon: '📊' }
     ])
@@ -213,6 +223,28 @@ export default {
     }
 
     /**
+     * Starta quiz
+     */
+    function startQuiz(quiz) {
+      if (players.value.length === 0) {
+        showToast('Inga spelare anslutna', 'warning')
+        return
+      }
+
+      if (!quiz.question_count || quiz.question_count === 0) {
+        showToast('Quiz har inga frågor', 'warning')
+        return
+      }
+
+      // Byt till spelkontroll-tab
+      activeTab.value = 'game'
+
+      // Skicka start-quiz event
+      socketService.emit('start_quiz', { quizId: quiz.id })
+      showToast(`Quiz "${quiz.name}" startat`, 'success')
+    }
+
+    /**
      * Visa fråga för spelare
      */
     function showQuestion(question) {
@@ -257,6 +289,7 @@ export default {
       handleLoginSuccess,
       logout,
       startGame,
+      startQuiz,
       showQuestion,
       endQuestion,
       endGame
