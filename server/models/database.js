@@ -64,6 +64,30 @@ function initializeDatabase() {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           last_login DATETIME
         )
+      `);
+
+      // Tabell för quiz
+      db.run(`
+        CREATE TABLE IF NOT EXISTS quizzes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Tabell för quiz-frågor (mellanliggande tabell)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS quiz_questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quiz_id INTEGER NOT NULL,
+          question_id INTEGER NOT NULL,
+          order_position INTEGER NOT NULL,
+          FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+          FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+          UNIQUE(quiz_id, question_id)
+        )
       `, (err) => {
         if (err) {
           reject(err);
@@ -257,11 +281,172 @@ const adminOperations = {
   }
 };
 
+/**
+ * Databasoperationer för quiz
+ */
+const quizOperations = {
+  // Hämta alla quiz
+  getAll: () => {
+    return new Promise((resolve, reject) => {
+      db.all(`
+        SELECT q.*, COUNT(qq.question_id) as question_count
+        FROM quizzes q
+        LEFT JOIN quiz_questions qq ON q.id = qq.quiz_id
+        GROUP BY q.id
+        ORDER BY q.created_at DESC
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  },
+
+  // Hämta quiz med ID
+  getById: (id) => {
+    return new Promise((resolve, reject) => {
+      db.get(`
+        SELECT q.*, COUNT(qq.question_id) as question_count
+        FROM quizzes q
+        LEFT JOIN quiz_questions qq ON q.id = qq.quiz_id
+        WHERE q.id = ?
+        GROUP BY q.id
+      `, [id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+
+  // Skapa nytt quiz
+  create: (quizData) => {
+    return new Promise((resolve, reject) => {
+      const { name, description } = quizData;
+      
+      db.run(`
+        INSERT INTO quizzes (name, description)
+        VALUES (?, ?)
+      `, [name, description || null], function(err) {
+        if (err) reject(err);
+        else resolve({ id: this.lastID, name, description });
+      });
+    });
+  },
+
+  // Uppdatera quiz
+  update: (id, quizData) => {
+    return new Promise((resolve, reject) => {
+      const { name, description } = quizData;
+      
+      db.run(`
+        UPDATE quizzes 
+        SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [name, description || null, id], function(err) {
+        if (err) reject(err);
+        else resolve({ id, changes: this.changes });
+      });
+    });
+  },
+
+  // Ta bort quiz
+  delete: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`DELETE FROM quizzes WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve({ id, changes: this.changes });
+      });
+    });
+  },
+
+  // Lägg till fråga till quiz
+  addQuestion: (quizId, questionId, orderPosition) => {
+    return new Promise((resolve, reject) => {
+      db.run(`
+        INSERT INTO quiz_questions (quiz_id, question_id, order_position)
+        VALUES (?, ?, ?)
+      `, [quizId, questionId, orderPosition], function(err) {
+        if (err) reject(err);
+        else resolve({ id: this.lastID, quizId, questionId, orderPosition });
+      });
+    });
+  },
+
+  // Ta bort fråga från quiz
+  removeQuestion: (quizId, questionId) => {
+    return new Promise((resolve, reject) => {
+      db.run(`
+        DELETE FROM quiz_questions 
+        WHERE quiz_id = ? AND question_id = ?
+      `, [quizId, questionId], function(err) {
+        if (err) reject(err);
+        else resolve({ changes: this.changes });
+      });
+    });
+  },
+
+  // Hämta alla frågor i ett quiz i rätt ordning
+  getQuestions: (quizId) => {
+    return new Promise((resolve, reject) => {
+      db.all(`
+        SELECT q.*, qq.order_position
+        FROM questions q
+        INNER JOIN quiz_questions qq ON q.id = qq.question_id
+        WHERE qq.quiz_id = ?
+        ORDER BY qq.order_position ASC
+      `, [quizId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  },
+
+  // Uppdatera ordningen på frågor i ett quiz
+  updateQuestionOrder: (quizId, questionOrders) => {
+    return new Promise((resolve, reject) => {
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        
+        let completed = 0;
+        let hasError = false;
+
+        questionOrders.forEach(({ questionId, orderPosition }) => {
+          db.run(`
+            UPDATE quiz_questions 
+            SET order_position = ? 
+            WHERE quiz_id = ? AND question_id = ?
+          `, [orderPosition, quizId, questionId], (err) => {
+            if (err && !hasError) {
+              hasError = true;
+              db.run('ROLLBACK');
+              reject(err);
+              return;
+            }
+            
+            completed++;
+            if (completed === questionOrders.length && !hasError) {
+              db.run('COMMIT', (err) => {
+                if (err) reject(err);
+                else resolve({ updated: completed });
+              });
+            }
+          });
+        });
+
+        if (questionOrders.length === 0) {
+          db.run('COMMIT');
+          resolve({ updated: 0 });
+        }
+      });
+    });
+  }
+};
+
 // Exportera databas och operationer
 module.exports = {
   db,
   initializeDatabase,
   questions: questionOperations,
   gameSessions: gameSessionOperations,
-  admin: adminOperations
+  admin: adminOperations,
+  quizzes: quizOperations
 };

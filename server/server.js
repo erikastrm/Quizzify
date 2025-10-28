@@ -22,6 +22,7 @@ const io = socketIo(server, {
 const db = require('./models/database');
 const questionsRouter = require('./routes/questions');
 const authRouter = require('./routes/auth');
+const quizzesRouter = require('./routes/quizzes');
 
 // Middleware
 app.use(cors({
@@ -46,6 +47,7 @@ app.use(session({
 // Routes
 app.use('/api/questions', questionsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/quizzes', quizzesRouter);
 
 // Spel-state som lagras i minnet (kan senare flyttas till databas)
 let gameState = {
@@ -56,7 +58,11 @@ let gameState = {
   players: new Map(), // spelarID -> { name, score, socketId }
   answers: new Map(), // questionId -> Map(playerId -> answer)
   timeLeft: 0,
-  questionTimer: null // Timer för aktuell fråga
+  questionTimer: null, // Timer för aktuell fråga
+  // Quiz-relaterat
+  currentQuiz: null, // Aktuellt quiz { id, name, questions: [] }
+  currentQuizQuestionIndex: 0, // Index i quiz-frågelistan
+  totalQuestionsInQuiz: 0 // Totalt antal frågor i aktuellt quiz
 };
 
 // Socket.IO hantering för realtidskommunikation
@@ -143,6 +149,84 @@ io.on('connection', (socket) => {
     });
     
     console.log('Spelet har startats av admin');
+  });
+
+  /**
+   * EVENT: start_quiz
+   * Admin startar ett quiz med förvald frågeordning
+   */
+  socket.on('start_quiz', async (quizData) => {
+    try {
+      if (gameState.isActive) {
+        socket.emit('error', 'Spelet är redan igång');
+        return;
+      }
+
+      const { quizzes } = require('./models/database');
+      
+      // Hämta quiz och dess frågor
+      const quiz = await quizzes.getById(quizData.quizId);
+      if (!quiz) {
+        socket.emit('error', 'Quiz inte funnet');
+        return;
+      }
+
+      const questions = await quizzes.getQuestions(quizData.quizId);
+      if (questions.length === 0) {
+        socket.emit('error', 'Quiz har inga frågor');
+        return;
+      }
+
+      // Sätt upp quiz-state
+      gameState.isActive = true;
+      gameState.currentQuiz = {
+        id: quiz.id,
+        name: quiz.name,
+        questions: questions
+      };
+      gameState.currentQuizQuestionIndex = 0;
+      gameState.totalQuestionsInQuiz = questions.length;
+      gameState.currentQuestion = null;
+      gameState.answers.clear();
+      gameState.timeLeft = 0;
+
+      // Återställ alla spelares poäng
+      gameState.players.forEach(player => {
+        player.score = 0;
+      });
+
+      // Meddela alla att quiz har startats
+      io.emit('quiz_started', {
+        quizId: quiz.id,
+        quizName: quiz.name,
+        totalQuestions: questions.length
+      });
+
+      // Skicka uppdaterad spelstatus
+      io.emit('game_state', {
+        isActive: gameState.isActive,
+        currentQuestion: gameState.currentQuestion,
+        players: Array.from(gameState.players.values()),
+        timeLeft: gameState.timeLeft,
+        currentQuiz: {
+          id: quiz.id,
+          name: quiz.name,
+          totalQuestions: questions.length,
+          currentQuestionIndex: 0
+        }
+      });
+
+      console.log(`Quiz "${quiz.name}" startat med ${questions.length} frågor`);
+
+      // Visa första frågan automatiskt efter 3 sekunder
+      setTimeout(() => {
+        showNextQuizQuestion();
+      }, 3000);
+
+    } catch (error) {
+      console.error('Fel vid start av quiz:', error);
+      socket.emit('error', 'Kunde inte starta quiz');
+    }
   });
 
   /**
@@ -270,6 +354,25 @@ io.on('connection', (socket) => {
     gameState.currentQuestion = null;
     gameState.timeLeft = 0;
     console.log('Fråga avslutad, resultat skickade');
+
+    // Om vi kör ett quiz, visa nästa fråga automatiskt efter 5 sekunder
+    if (gameState.currentQuiz && gameState.currentQuizQuestionIndex < gameState.totalQuestionsInQuiz - 1) {
+      console.log('Visar nästa fråga om 5 sekunder...');
+      setTimeout(() => {
+        showNextQuizQuestion();
+      }, 5000);
+    } else if (gameState.currentQuiz) {
+      // Quiz är slut
+      console.log('Quiz avslutat - alla frågor besvarade');
+      setTimeout(() => {
+        io.emit('quiz_completed', {
+          quizName: gameState.currentQuiz.name,
+          totalQuestions: gameState.totalQuestionsInQuiz
+        });
+        // Auto-avsluta spelet
+        socket.emit('end_game');
+      }, 5000);
+    }
   });
 
   /**
@@ -286,6 +389,9 @@ io.on('connection', (socket) => {
     gameState.isActive = false;
     gameState.currentQuestion = null;
     gameState.timeLeft = 0;
+    gameState.currentQuiz = null;
+    gameState.currentQuizQuestionIndex = 0;
+    gameState.totalQuestionsInQuiz = 0;
     
     const finalScores = Array.from(gameState.players.values())
       .sort((a, b) => b.score - a.score);
@@ -330,6 +436,84 @@ io.on('connection', (socket) => {
 });
 
 /**
+ * Hjälpfunktion: Visa nästa fråga i quiz
+ */
+function showNextQuizQuestion() {
+  if (!gameState.currentQuiz || !gameState.isActive) {
+    console.log('Inget aktivt quiz');
+    return;
+  }
+
+  if (gameState.currentQuizQuestionIndex >= gameState.currentQuiz.questions.length) {
+    console.log('Inga fler frågor i quiz');
+    return;
+  }
+
+  const questionData = gameState.currentQuiz.questions[gameState.currentQuizQuestionIndex];
+  
+  gameState.currentQuestion = {
+    id: questionData.id,
+    question: questionData.question,
+    options: {
+      A: questionData.option_a,
+      B: questionData.option_b,
+      C: questionData.option_c,
+      D: questionData.option_d
+    },
+    correctAnswer: questionData.correct_answer,
+    timeLimit: questionData.time_limit,
+    category: questionData.category,
+    difficulty: questionData.difficulty,
+    image_url: questionData.image_url
+  };
+
+  gameState.questionStartTime = Date.now();
+  gameState.timeLeft = questionData.time_limit || 30;
+
+  // Skicka frågan till alla spelare (utan rätt svar)
+  const questionForPlayers = {
+    id: questionData.id,
+    question: questionData.question,
+    options: {
+      A: questionData.option_a,
+      B: questionData.option_b,
+      C: questionData.option_c,
+      D: questionData.option_d
+    },
+    timeLimit: questionData.time_limit,
+    image_url: questionData.image_url,
+    category: questionData.category,
+    difficulty: questionData.difficulty,
+    questionNumber: gameState.currentQuizQuestionIndex + 1,
+    totalQuestions: gameState.totalQuestionsInQuiz
+  };
+
+  io.emit('question_shown', questionForPlayers);
+
+  // Skicka uppdaterad spelstatus till admin
+  io.emit('game_state', {
+    isActive: gameState.isActive,
+    currentQuestion: gameState.currentQuestion,
+    players: Array.from(gameState.players.values()),
+    timeLeft: gameState.timeLeft,
+    currentQuiz: gameState.currentQuiz ? {
+      id: gameState.currentQuiz.id,
+      name: gameState.currentQuiz.name,
+      totalQuestions: gameState.totalQuestionsInQuiz,
+      currentQuestionIndex: gameState.currentQuizQuestionIndex + 1
+    } : null
+  });
+
+  // Starta timer för frågan
+  startQuestionTimer(questionData.time_limit || 30);
+
+  console.log(`Quiz-fråga ${gameState.currentQuizQuestionIndex + 1}/${gameState.totalQuestionsInQuiz} visad: ${questionData.question}`);
+  
+  // Öka index för nästa fråga
+  gameState.currentQuizQuestionIndex++;
+}
+
+/**
  * Hjälpfunktion: Starta timer för fråga
  */
 function startQuestionTimer(duration) {
@@ -349,11 +533,30 @@ function startQuestionTimer(duration) {
     if (gameState.timeLeft <= 0) {
       clearInterval(gameState.questionTimer);
       gameState.questionTimer = null;
+      
       // Auto-avsluta frågan när tiden tar slut
       const results = calculateQuestionResults();
       io.emit('question_results', results);
       io.emit('scores_updated', Array.from(gameState.players.values()));
+      
       gameState.currentQuestion = null;
+
+      // Om vi kör ett quiz, visa nästa fråga automatiskt efter 5 sekunder
+      if (gameState.currentQuiz && gameState.currentQuizQuestionIndex < gameState.totalQuestionsInQuiz) {
+        console.log('Auto-visar nästa fråga om 5 sekunder...');
+        setTimeout(() => {
+          showNextQuizQuestion();
+        }, 5000);
+      } else if (gameState.currentQuiz) {
+        // Quiz är slut
+        console.log('Quiz avslutat - alla frågor besvarade');
+        setTimeout(() => {
+          io.emit('quiz_completed', {
+            quizName: gameState.currentQuiz.name,
+            totalQuestions: gameState.totalQuestionsInQuiz
+          });
+        }, 3000);
+      }
     }
   }, 1000);
 }
@@ -431,9 +634,18 @@ function calculateQuestionResults() {
   return results;
 }
 
-// Starta servern
+// Initiera databasen och starta servern
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Quiz-server körs på port ${PORT}`);
-  console.log(`Socket.IO aktiverat för realtidskommunikation`);
-});
+
+db.initializeDatabase()
+  .then(() => {
+    console.log('Databas initierad');
+    server.listen(PORT, () => {
+      console.log(`Quiz-server körs på port ${PORT}`);
+      console.log(`Socket.IO aktiverat för realtidskommunikation`);
+    });
+  })
+  .catch((err) => {
+    console.error('Fel vid initiering av databas:', err);
+    process.exit(1);
+  });

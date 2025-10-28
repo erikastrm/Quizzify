@@ -9,17 +9,24 @@
     "setup-db": "node setup-database.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.4",
-    "sqlite3": "^5.1.6",
+    "axios": "^1.13.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "bcryptjs": "^2.4.3"
+    "socket.io": "^4.7.4",
+    "sqlite3": "^5.1.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
-  "keywords": ["quiz", "realtime", "socket.io", "vue", "nodejs"],
+  "keywords": [
+    "quiz",
+    "realtime",
+    "socket.io",
+    "vue",
+    "nodejs"
+  ],
   "author": "",
   "license": "MIT"
 }
