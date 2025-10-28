@@ -59,9 +59,22 @@
         <h2 class="question-text">{{ question.question }}</h2>
       </div>
 
-      <!-- Bild (om det finns en) -->
-      <div v-if="question.image_url" class="question-image">
-        <img :src="question.image_url" :alt="question.question" />
+      <!-- Media (bild, ljud eller video) -->
+      <div v-if="question.media_url" class="question-media">
+        <!-- Bild -->
+        <div v-if="question.media_type === 'image'" class="media-image">
+          <img :src="getMediaUrl(question.media_url)" :alt="question.question" />
+        </div>
+        
+        <!-- Ljud -->
+        <div v-else-if="question.media_type === 'audio'" class="media-audio">
+          <audio :src="getMediaUrl(question.media_url)" controls></audio>
+        </div>
+        
+        <!-- Video -->
+        <div v-else-if="question.media_type === 'video'" class="media-video">
+          <video :src="getMediaUrl(question.media_url)" controls></video>
+        </div>
       </div>
 
       <!-- Svarsalternativ -->
@@ -136,6 +149,15 @@ export default {
     })
 
     /**
+     * Hämta media URL
+     */
+    function getMediaUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http')) return path
+      return `http://localhost:3001${path}`
+    }
+
+    /**
      * Välj ett svar
      */
     function selectAnswer(key) {
@@ -185,7 +207,8 @@ export default {
       strokeDashoffset,
       selectAnswer,
       submitAnswer,
-      getDifficultyText
+      getDifficultyText,
+      getMediaUrl
     }
   }
 }
@@ -314,6 +337,51 @@ export default {
   text-align: center;
 }
 
+.question-media {
+  margin: 2rem auto;
+  max-width: 600px;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.media-image {
+  background: #f9fafb;
+}
+
+.media-image img {
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+}
+
+.media-audio {
+  padding: 2rem;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-audio audio {
+  width: 100%;
+  max-width: 500px;
+}
+
+.media-video {
+  background: #000;
+}
+
+.media-video video {
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  display: block;
+}
+
+/* Behåll bakåtkompatibilitet med gamla image_url */
 .question-image {
   margin: 2rem auto;
   max-width: 600px;

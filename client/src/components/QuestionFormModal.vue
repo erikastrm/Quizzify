@@ -21,21 +21,84 @@
 
         <!-- Bild-URL (valfritt) -->
         <div class="form-group">
-          <label class="label">Bild-URL (valfritt)</label>
-          <input
-            v-model="form.image_url"
-            type="url"
-            class="input"
-            placeholder="https://example.com/image.jpg"
-          />
-          <small class="helper-text">
-            Lägg till en bild till frågan (t.ex. "Vilket djur är detta?")
-          </small>
-          <!-- Bild-förhandsvisning -->
-          <div v-if="form.image_url" class="image-preview">
-            <img :src="form.image_url" alt="Fråge-bild förhandsvisning" @error="imageLoadError = true" />
-            <p v-if="imageLoadError" class="error-text">Kunde inte ladda bilden. Kontrollera URL:en.</p>
+          <label class="label">Media (valfritt)</label>
+          
+          <!-- Media-typ väljare -->
+          <div class="media-type-selector">
+            <button 
+              type="button"
+              v-for="type in mediaTypes" 
+              :key="type.value"
+              @click="form.media_type = type.value"
+              :class="{ active: form.media_type === type.value }"
+              class="media-type-btn"
+            >
+              {{ type.icon }} {{ type.label }}
+            </button>
           </div>
+
+          <!-- Om mediatyp är vald (inte 'none') -->
+          <div v-if="form.media_type !== 'none'" class="media-upload-section">
+            <!-- Uppladdningsområde -->
+            <div 
+              v-if="!form.media_url"
+              @drop.prevent="handleDrop"
+              @dragover.prevent="isDragging = true"
+              @dragleave.prevent="isDragging = false"
+              :class="{ dragging: isDragging }"
+              class="upload-area"
+            >
+              <input 
+                ref="fileInput"
+                type="file"
+                @change="handleFileSelect"
+                :accept="acceptedFileTypes"
+                style="display: none"
+              />
+              
+              <div class="upload-content">
+                <div class="upload-icon">📁</div>
+                <p>Dra och släpp en fil här eller</p>
+                <button type="button" @click="$refs.fileInput.click()" class="btn-upload">
+                  Välj fil
+                </button>
+                <button type="button" @click="showMediaLibrary = true" class="btn-library">
+                  📚 Välj från bibliotek
+                </button>
+              </div>
+
+              <div v-if="uploadProgress > 0 && uploadProgress < 100" class="progress-bar">
+                <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+              </div>
+            </div>
+
+            <!-- Förhandsvisning av vald media -->
+            <div v-if="form.media_url" class="media-preview-container">
+              <!-- Bild -->
+              <div v-if="form.media_type === 'image'" class="media-preview">
+                <img :src="getMediaUrl(form.media_url)" alt="Förhandsvisning" />
+              </div>
+              
+              <!-- Ljud -->
+              <div v-else-if="form.media_type === 'audio'" class="media-preview audio">
+                <div class="audio-icon">🎵</div>
+                <audio :src="getMediaUrl(form.media_url)" controls></audio>
+              </div>
+              
+              <!-- Video -->
+              <div v-else-if="form.media_type === 'video'" class="media-preview video">
+                <video :src="getMediaUrl(form.media_url)" controls></video>
+              </div>
+
+              <button type="button" @click="removeMedia" class="btn-remove-media">
+                ✕ Ta bort media
+              </button>
+            </div>
+          </div>
+
+          <small class="helper-text">
+            Lägg till en bild, ljud eller video till frågan
+          </small>
         </div>
 
         <!-- Svarsalternativ -->
@@ -160,15 +223,35 @@
         </div>
       </form>
     </div>
+
+    <!-- MediaLibrary Modal -->
+    <div v-if="showMediaLibrary" class="media-library-modal">
+      <div class="media-library-content" @click.stop>
+        <div class="media-library-header">
+          <h3>Mediabibliotek</h3>
+          <button class="close-btn" @click="showMediaLibrary = false">✕</button>
+        </div>
+        <MediaLibrary 
+          :initialType="form.media_type !== 'none' ? form.media_type : null"
+          @select="selectFromLibrary"
+          @close="showMediaLibrary = false"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted, inject } from 'vue'
+import axios from 'axios'
 import apiService from '../services/api'
+import MediaLibrary from './MediaLibrary.vue'
 
 export default {
   name: 'QuestionFormModal',
+  components: {
+    MediaLibrary
+  },
   props: {
     question: {
       type: Object,
@@ -180,6 +263,11 @@ export default {
     const showToast = inject('showToast')
 
     const isSaving = ref(false)
+    const isDragging = ref(false)
+    const uploadProgress = ref(0)
+    const showMediaLibrary = ref(false)
+    const fileInput = ref(null)
+    
     const form = ref({
       question: '',
       option_a: '',
@@ -190,10 +278,16 @@ export default {
       category: '',
       difficulty: 'medium',
       time_limit: 30,
-      image_url: ''
+      media_url: '',
+      media_type: 'none'
     })
-    
-    const imageLoadError = ref(false)
+
+    const mediaTypes = ref([
+      { value: 'none', label: 'Ingen', icon: '🚫' },
+      { value: 'image', label: 'Bild', icon: '🖼️' },
+      { value: 'audio', label: 'Ljud', icon: '🎵' },
+      { value: 'video', label: 'Video', icon: '🎬' }
+    ])
 
     // Computed
     const isEditing = computed(() => !!props.question)
@@ -215,6 +309,15 @@ export default {
              form.value.option_d
     })
 
+    const acceptedFileTypes = computed(() => {
+      const types = {
+        image: 'image/jpeg,image/png,image/gif,image/webp',
+        audio: 'audio/mpeg,audio/mp3,audio/wav,audio/ogg',
+        video: 'video/mp4,video/webm,video/ogg'
+      }
+      return types[form.value.media_type] || '*'
+    })
+
     /**
      * Initiera formulär
      */
@@ -231,10 +334,90 @@ export default {
           category: props.question.category || '',
           difficulty: props.question.difficulty || 'medium',
           time_limit: props.question.time_limit || 30,
-          image_url: props.question.image_url || ''
+          media_url: props.question.media_url || '',
+          media_type: props.question.media_type || 'none'
         }
       }
     })
+
+    /**
+     * Hantera filval
+     */
+    async function handleFileSelect(event) {
+      const file = event.target.files[0]
+      if (file) {
+        await uploadFile(file)
+      }
+    }
+
+    /**
+     * Hantera drag & drop
+     */
+    async function handleDrop(event) {
+      isDragging.value = false
+      const file = event.dataTransfer.files[0]
+      if (file) {
+        await uploadFile(file)
+      }
+    }
+
+    /**
+     * Ladda upp fil
+     */
+    async function uploadFile(file) {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('media_type', form.value.media_type)
+
+      try {
+        uploadProgress.value = 10
+        
+        const response = await axios.post('http://localhost:3001/api/media/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          onUploadProgress: (progressEvent) => {
+            uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          }
+        })
+
+        if (response.data.success) {
+          form.value.media_url = response.data.file.file_path
+          showToast('Fil uppladdad!', 'success')
+        }
+      } catch (error) {
+        console.error('Uppladdningsfel:', error)
+        showToast('Kunde inte ladda upp fil', 'error')
+      } finally {
+        uploadProgress.value = 0
+      }
+    }
+
+    /**
+     * Välj från mediabibliotek
+     */
+    function selectFromLibrary(file) {
+      form.value.media_url = file.file_path
+      form.value.media_type = file.media_type
+      showMediaLibrary.value = false
+      showToast('Media vald från bibliotek', 'success')
+    }
+
+    /**
+     * Ta bort media
+     */
+    function removeMedia() {
+      form.value.media_url = ''
+    }
+
+    /**
+     * Hämta media URL
+     */
+    function getMediaUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http')) return path
+      return `http://localhost:3001${path}`
+    }
 
     /**
      * Spara fråga
@@ -279,11 +462,21 @@ export default {
 
     return {
       form,
-      imageLoadError,
       isSaving,
+      isDragging,
+      uploadProgress,
+      showMediaLibrary,
+      fileInput,
+      mediaTypes,
       isEditing,
       isFormValid,
       canPreview,
+      acceptedFileTypes,
+      handleFileSelect,
+      handleDrop,
+      selectFromLibrary,
+      removeMedia,
+      getMediaUrl,
       saveQuestion,
       closeModal
     }
@@ -358,6 +551,206 @@ export default {
   color: #6b7280;
   margin-top: 0.25rem;
   display: block;
+}
+
+.media-type-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.media-type-btn {
+  padding: 8px 16px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.media-type-btn:hover {
+  border-color: #667eea;
+}
+
+.media-type-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.media-upload-section {
+  margin-top: 15px;
+}
+
+.upload-area {
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  transition: all 0.3s;
+  background: #f9fafb;
+}
+
+.upload-area.dragging {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.upload-icon {
+  font-size: 48px;
+}
+
+.btn-upload, .btn-library {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+  margin-top: 5px;
+}
+
+.btn-upload {
+  background: #667eea;
+  color: white;
+}
+
+.btn-upload:hover {
+  background: #5568d3;
+}
+
+.btn-library {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.btn-library:hover {
+  background: #e5e7eb;
+}
+
+.progress-bar {
+  margin-top: 15px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #667eea;
+  transition: width 0.3s;
+}
+
+.media-preview-container {
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 15px;
+  background: #f9fafb;
+}
+
+.media-preview {
+  width: 100%;
+  max-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.media-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+.media-preview.audio {
+  flex-direction: column;
+  padding: 20px;
+}
+
+.audio-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.media-preview audio {
+  width: 100%;
+}
+
+.media-preview.video {
+  padding: 0;
+}
+
+.media-preview video {
+  max-width: 100%;
+  max-height: 300px;
+}
+
+.btn-remove-media {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: #ef4444;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-remove-media:hover {
+  background: #dc2626;
+}
+
+.media-library-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1rem;
+}
+
+.media-library-content {
+  background: white;
+  border-radius: 1rem;
+  width: 100%;
+  max-width: 1000px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.media-library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.media-library-header h3 {
+  margin: 0;
+  color: #374151;
 }
 
 .image-preview {

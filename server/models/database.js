@@ -29,6 +29,24 @@ function initializeDatabase() {
         )
       `);
 
+      // Lägg till media_url och media_type kolumner (hanterar om de redan finns)
+      db.run(`ALTER TABLE questions ADD COLUMN media_url TEXT`, () => {});
+      db.run(`ALTER TABLE questions ADD COLUMN media_type TEXT DEFAULT 'none'`, () => {});
+
+      // Tabell för mediafiler
+      db.run(`
+        CREATE TABLE IF NOT EXISTS media_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          filename TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          media_type TEXT NOT NULL CHECK (media_type IN ('image', 'audio', 'video')),
+          file_size INTEGER,
+          mime_type TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Tabell för spelhistorik
       db.run(`
         CREATE TABLE IF NOT EXISTS game_sessions (
@@ -108,7 +126,8 @@ const questionOperations = {
     return new Promise((resolve, reject) => {
       db.all(`
         SELECT id, question, option_a, option_b, option_c, option_d, 
-               correct_answer, time_limit, category, difficulty, created_at, image_url
+               correct_answer, time_limit, category, difficulty, created_at, 
+               media_url, media_type
         FROM questions 
         ORDER BY created_at DESC
       `, (err, rows) => {
@@ -133,12 +152,12 @@ const questionOperations = {
   // Skapa ny fråga
   create: (questionData) => {
     return new Promise((resolve, reject) => {
-      const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url } = questionData;
+      const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, media_url, media_type } = questionData;
       
       db.run(`
-        INSERT INTO questions (question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [question, option_a, option_b, option_c, option_d, correct_answer, time_limit || 30, category, difficulty || 'medium', image_url || null], 
+        INSERT INTO questions (question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, media_url, media_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [question, option_a, option_b, option_c, option_d, correct_answer, time_limit || 30, category, difficulty || 'medium', media_url || null, media_type || 'none'], 
       function(err) {
         if (err) reject(err);
         else resolve({ id: this.lastID, ...questionData });
@@ -149,15 +168,16 @@ const questionOperations = {
   // Uppdatera fråga
   update: (id, questionData) => {
     return new Promise((resolve, reject) => {
-      const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url } = questionData;
+      const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, media_url, media_type } = questionData;
       
       db.run(`
         UPDATE questions 
         SET question = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, 
-            correct_answer = ?, time_limit = ?, category = ?, difficulty = ?, image_url = ?,
+            correct_answer = ?, time_limit = ?, category = ?, difficulty = ?, 
+            media_url = ?, media_type = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `, [question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url || null, id], 
+      `, [question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, media_url || null, media_type || 'none', id], 
       function(err) {
         if (err) reject(err);
         else resolve({ id, changes: this.changes });
@@ -441,6 +461,66 @@ const quizOperations = {
   }
 };
 
+/**
+ * Databasoperationer för mediafiler
+ */
+const mediaOperations = {
+  // Spara metadata för uppladdad fil
+  create: (fileData) => {
+    return new Promise((resolve, reject) => {
+      const { filename, original_name, file_path, media_type, file_size, mime_type } = fileData;
+      
+      db.run(`
+        INSERT INTO media_files (filename, original_name, file_path, media_type, file_size, mime_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [filename, original_name, file_path, media_type, file_size, mime_type], function(err) {
+        if (err) reject(err);
+        else resolve({ id: this.lastID, ...fileData });
+      });
+    });
+  },
+
+  // Hämta alla mediafiler
+  getAll: (mediaType = null) => {
+    return new Promise((resolve, reject) => {
+      let query = 'SELECT * FROM media_files';
+      let params = [];
+      
+      if (mediaType) {
+        query += ' WHERE media_type = ?';
+        params.push(mediaType);
+      }
+      
+      query += ' ORDER BY created_at DESC';
+      
+      db.all(query, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  },
+
+  // Hämta mediafil med ID
+  getById: (id) => {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM media_files WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+
+  // Ta bort mediafil
+  delete: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run('DELETE FROM media_files WHERE id = ?', [id], function(err) {
+        if (err) reject(err);
+        else resolve({ id, changes: this.changes });
+      });
+    });
+  }
+};
+
 // Exportera databas och operationer
 module.exports = {
   db,
@@ -448,5 +528,6 @@ module.exports = {
   questions: questionOperations,
   gameSessions: gameSessionOperations,
   admin: adminOperations,
-  quizzes: quizOperations
+  quizzes: quizOperations,
+  media: mediaOperations
 };

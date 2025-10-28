@@ -23,6 +23,7 @@ const db = require('./models/database');
 const questionsRouter = require('./routes/questions');
 const authRouter = require('./routes/auth');
 const quizzesRouter = require('./routes/quizzes');
+const mediaRouter = require('./routes/media');
 
 // Middleware
 app.use(cors({
@@ -31,6 +32,8 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/dist')));
+// Servera uppladdade mediafiler
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Session konfiguration
 app.use(session({
@@ -48,6 +51,7 @@ app.use(session({
 app.use('/api/questions', questionsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/quizzes', quizzesRouter);
+app.use('/api/media', mediaRouter);
 
 // Spel-state som lagras i minnet (kan senare flyttas till databas)
 let gameState = {
