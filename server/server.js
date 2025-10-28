@@ -350,6 +350,21 @@ io.on('connection', (socket) => {
     
     gameState.currentQuestion = null;
     gameState.timeLeft = 0;
+
+    // Skicka uppdaterad game state
+    io.emit('game_state', {
+      isActive: gameState.isActive,
+      currentQuestion: null,
+      players: Array.from(gameState.players.values()),
+      timeLeft: 0,
+      currentQuiz: gameState.currentQuiz ? {
+        id: gameState.currentQuiz.id,
+        name: gameState.currentQuiz.name,
+        totalQuestions: gameState.totalQuestionsInQuiz,
+        currentQuestionIndex: gameState.currentQuizQuestionIndex
+      } : null
+    });
+
     console.log('Fråga avslutad, resultat skickade');
 
     // Kolla om det finns fler frågor i quizet (men visa dem INTE automatiskt)
@@ -551,6 +566,21 @@ function startQuestionTimer(duration) {
       io.emit('scores_updated', Array.from(gameState.players.values()));
       
       gameState.currentQuestion = null;
+      gameState.timeLeft = 0;
+
+      // Skicka uppdaterad game state så att UI uppdateras
+      io.emit('game_state', {
+        isActive: gameState.isActive,
+        currentQuestion: null,
+        players: Array.from(gameState.players.values()),
+        timeLeft: 0,
+        currentQuiz: gameState.currentQuiz ? {
+          id: gameState.currentQuiz.id,
+          name: gameState.currentQuiz.name,
+          totalQuestions: gameState.totalQuestionsInQuiz,
+          currentQuestionIndex: gameState.currentQuizQuestionIndex
+        } : null
+      });
 
       // Kolla om quiz är slut men visa INTE nästa fråga automatiskt
       if (gameState.currentQuiz && gameState.currentQuizQuestionIndex >= gameState.totalQuestionsInQuiz) {
