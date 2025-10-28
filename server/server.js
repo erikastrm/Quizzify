@@ -218,10 +218,7 @@ io.on('connection', (socket) => {
 
       console.log(`Quiz "${quiz.name}" startat med ${questions.length} frågor`);
 
-      // Visa första frågan automatiskt efter 3 sekunder
-      setTimeout(() => {
-        showNextQuizQuestion();
-      }, 3000);
+      // Admin kan nu manuellt visa första frågan
 
     } catch (error) {
       console.error('Fel vid start av quiz:', error);
@@ -355,24 +352,38 @@ io.on('connection', (socket) => {
     gameState.timeLeft = 0;
     console.log('Fråga avslutad, resultat skickade');
 
-    // Om vi kör ett quiz, visa nästa fråga automatiskt efter 5 sekunder
-    if (gameState.currentQuiz && gameState.currentQuizQuestionIndex < gameState.totalQuestionsInQuiz - 1) {
-      console.log('Visar nästa fråga om 5 sekunder...');
-      setTimeout(() => {
-        showNextQuizQuestion();
-      }, 5000);
-    } else if (gameState.currentQuiz) {
-      // Quiz är slut
+    // Kolla om det finns fler frågor i quizet (men visa dem INTE automatiskt)
+    if (gameState.currentQuiz && gameState.currentQuizQuestionIndex >= gameState.totalQuestionsInQuiz) {
+      // Quiz är slut - alla frågor besvarade
       console.log('Quiz avslutat - alla frågor besvarade');
-      setTimeout(() => {
-        io.emit('quiz_completed', {
-          quizName: gameState.currentQuiz.name,
-          totalQuestions: gameState.totalQuestionsInQuiz
-        });
-        // Auto-avsluta spelet
-        socket.emit('end_game');
-      }, 5000);
+      io.emit('quiz_completed', {
+        quizName: gameState.currentQuiz.name,
+        totalQuestions: gameState.totalQuestionsInQuiz
+      });
     }
+  });
+
+  /**
+   * EVENT: show_next_quiz_question
+   * Admin begär nästa fråga i quizet manuellt
+   */
+  socket.on('show_next_quiz_question', () => {
+    if (!gameState.currentQuiz) {
+      socket.emit('error', 'Inget aktivt quiz');
+      return;
+    }
+
+    if (gameState.currentQuestion) {
+      socket.emit('error', 'Avsluta nuvarande fråga först');
+      return;
+    }
+
+    if (gameState.currentQuizQuestionIndex >= gameState.totalQuestionsInQuiz) {
+      socket.emit('error', 'Inga fler frågor i quizet');
+      return;
+    }
+
+    showNextQuizQuestion();
   });
 
   /**
@@ -541,21 +552,13 @@ function startQuestionTimer(duration) {
       
       gameState.currentQuestion = null;
 
-      // Om vi kör ett quiz, visa nästa fråga automatiskt efter 5 sekunder
-      if (gameState.currentQuiz && gameState.currentQuizQuestionIndex < gameState.totalQuestionsInQuiz) {
-        console.log('Auto-visar nästa fråga om 5 sekunder...');
-        setTimeout(() => {
-          showNextQuizQuestion();
-        }, 5000);
-      } else if (gameState.currentQuiz) {
-        // Quiz är slut
+      // Kolla om quiz är slut men visa INTE nästa fråga automatiskt
+      if (gameState.currentQuiz && gameState.currentQuizQuestionIndex >= gameState.totalQuestionsInQuiz) {
         console.log('Quiz avslutat - alla frågor besvarade');
-        setTimeout(() => {
-          io.emit('quiz_completed', {
-            quizName: gameState.currentQuiz.name,
-            totalQuestions: gameState.totalQuestionsInQuiz
-          });
-        }, 3000);
+        io.emit('quiz_completed', {
+          quizName: gameState.currentQuiz.name,
+          totalQuestions: gameState.totalQuestionsInQuiz
+        });
       }
     }
   }, 1000);

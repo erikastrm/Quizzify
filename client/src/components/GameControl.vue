@@ -54,6 +54,19 @@
           >
             ⏹️ Avsluta fråga
           </button>
+
+          <!-- Visa nästa quiz-fråga knapp -->
+          <button 
+            v-if="gameState.isActive && gameState.currentQuiz && !gameState.currentQuestion"
+            class="button primary"
+            :disabled="isQuizComplete"
+            @click="$emit('show-next-quiz-question')"
+          >
+            ➡️ Nästa fråga
+            <span v-if="gameState.currentQuiz">
+              ({{ gameState.currentQuiz.currentQuestionIndex }} / {{ gameState.currentQuiz.totalQuestions }})
+            </span>
+          </button>
           
           <button 
             v-if="gameState.isActive"
@@ -227,7 +240,7 @@ export default {
       })
     }
   },
-  emits: ['start-game', 'show-question', 'end-question', 'end-game'],
+  emits: ['start-game', 'show-question', 'end-question', 'end-game', 'show-next-quiz-question'],
   setup(props, { emit }) {
     const showQuestionModal = ref(false)
     const showEndGameConfirm = ref(false)
@@ -257,6 +270,12 @@ export default {
           responseTime: answer?.responseTime || null
         }
       })
+    })
+
+    // Kontrollera om quiz är komplett
+    const isQuizComplete = computed(() => {
+      if (!props.gameState.currentQuiz) return false
+      return props.gameState.currentQuiz.currentQuestionIndex >= props.gameState.currentQuiz.totalQuestions
     })
 
     /**
@@ -387,6 +406,7 @@ export default {
       sortedPlayers,
       answerProgress,
       playersWithAnswerStatus,
+      isQuizComplete,
       getPlayerEmoji,
       showRandomQuestion,
       handleQuestionSelected,
@@ -523,6 +543,21 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.button.primary {
+  background: #667eea;
+  color: white;
+  font-weight: 600;
+}
+
+.button.primary:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .no-players {

@@ -45,6 +45,7 @@
           @start-game="startGame"
           @start-quiz="startQuiz"
           @show-question="showQuestion"
+          @show-next-quiz-question="showNextQuizQuestion"
           @end-question="endQuestion"
           @end-game="endGame"
         />
@@ -263,6 +264,23 @@ export default {
     }
 
     /**
+     * Visa nästa fråga i quiz
+     */
+    function showNextQuizQuestion() {
+      if (!gameState.value.currentQuiz) {
+        showToast('Inget aktivt quiz', 'warning')
+        return
+      }
+
+      // Rensa tidigare live svar
+      if (gameControlRef.value) {
+        gameControlRef.value.clearLiveAnswers()
+      }
+
+      socketService.emit('show_next_quiz_question')
+    }
+
+    /**
      * Avsluta aktuell fråga
      */
     function endQuestion() {
@@ -291,6 +309,7 @@ export default {
       startGame,
       startQuiz,
       showQuestion,
+      showNextQuizQuestion,
       endQuestion,
       endGame
     }
