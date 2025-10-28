@@ -6,41 +6,32 @@ const path = require('path');
 const fs = require('fs').promises;
 const { media } = require('../models/database');
 
-// Konfigurera multer för filuppladdning
+// Konfigurera multer för filuppladdning - börja med temp-mapp
 const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const mediaType = req.body.media_type || 'image';
-    const uploadPath = path.join(__dirname, '../uploads', mediaType + 's');
+  destination: (req, file, cb) => {
+    // Använd uploads-root, vi flyttar filen senare baserat på media_type
+    const uploadPath = path.join(__dirname, '../uploads');
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    cb(null, uniqueSuffix + ext);
+    cb(null, 'temp-' + uniqueSuffix + ext);
   }
 });
 
 // Filvalidering
 const fileFilter = (req, file, cb) => {
-  const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  const allowedAudioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
-  const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg'];
+  const allowedTypes = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
+    'video/mp4', 'video/webm', 'video/ogg'
+  ];
   
-  const mediaType = req.body.media_type || 'image';
-  
-  let allowed = false;
-  if (mediaType === 'image' && allowedImageTypes.includes(file.mimetype)) {
-    allowed = true;
-  } else if (mediaType === 'audio' && allowedAudioTypes.includes(file.mimetype)) {
-    allowed = true;
-  } else if (mediaType === 'video' && allowedVideoTypes.includes(file.mimetype)) {
-    allowed = true;
-  }
-  
-  if (allowed) {
+  if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Filtyp ${file.mimetype} stöds inte för ${mediaType}`), false);
+    cb(new Error(`Filtyp ${file.mimetype} stöds inte`), false);
   }
 };
 
@@ -63,31 +54,65 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     const mediaType = req.body.media_type || 'image';
-    let filePath = `/uploads/${mediaType}s/${req.file.filename}`;
-    let filename = req.file.filename;
+    const timestamp = Date.now();
+    const uniqueSuffix = Math.round(Math.random() * 1E9);
+    const ext = path.extname(req.file.originalname);
+    
+    let finalFilename;
+    let finalPath;
+    let filePath;
 
-    // Om det är en bild, optimera den med sharp
+    // Bestäm filnamn och sökväg baserat på mediatyp
     if (mediaType === 'image') {
-      const optimizedFilename = 'opt-' + filename;
-      const optimizedPath = path.join(__dirname, '../uploads/images', optimizedFilename);
+      // För bilder: optimera med sharp
+      finalFilename = `opt-${timestamp}-${uniqueSuffix}.jpg`;
+      finalPath = path.join(__dirname, '../uploads/images', finalFilename);
       
-      await sharp(req.file.path)
-        .resize(1920, 1080, { 
-          fit: 'inside',
-          withoutEnlargement: true 
-        })
-        .jpeg({ quality: 85 })
-        .toFile(optimizedPath);
+      try {
+        await sharp(req.file.path)
+          .resize(1920, 1080, { 
+            fit: 'inside',
+            withoutEnlargement: true 
+          })
+          .jpeg({ quality: 85 })
+          .toFile(finalPath);
+      } catch (sharpError) {
+        console.error('Sharp optimization error:', sharpError);
+        // Om sharp misslyckas, använd originalfilen
+        finalFilename = `${timestamp}-${uniqueSuffix}${ext}`;
+        finalPath = path.join(__dirname, '../uploads/images', finalFilename);
+        await fs.rename(req.file.path, finalPath);
+      }
       
-      // Ta bort originalfilen och använd den optimerade
+      filePath = `/uploads/images/${finalFilename}`;
+    } else if (mediaType === 'audio') {
+      // För ljud: flytta till audio-mapp
+      finalFilename = `${timestamp}-${uniqueSuffix}${ext}`;
+      finalPath = path.join(__dirname, '../uploads/audios', finalFilename);
+      await fs.rename(req.file.path, finalPath);
+      filePath = `/uploads/audios/${finalFilename}`;
+    } else if (mediaType === 'video') {
+      // För video: flytta till video-mapp
+      finalFilename = `${timestamp}-${uniqueSuffix}${ext}`;
+      finalPath = path.join(__dirname, '../uploads/videos', finalFilename);
+      await fs.rename(req.file.path, finalPath);
+      filePath = `/uploads/videos/${finalFilename}`;
+    } else {
+      // Okänd typ
       await fs.unlink(req.file.path);
-      filename = optimizedFilename;
-      filePath = `/uploads/images/${optimizedFilename}`;
+      return res.status(400).json({ error: 'Ogiltig mediatyp' });
+    }
+
+    // Ta bort temp-filen om den fortfarande finns
+    try {
+      await fs.unlink(req.file.path);
+    } catch (err) {
+      // Filen redan borttagen, ignorera
     }
 
     // Spara metadata i databasen
     const fileData = {
-      filename: filename,
+      filename: finalFilename,
       original_name: req.file.originalname,
       file_path: filePath,
       media_type: mediaType,

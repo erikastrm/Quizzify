@@ -251,7 +251,8 @@ io.on('connection', (socket) => {
         question: questionData.question,
         options: questionData.options,
         timeLimit: questionData.timeLimit,
-        image_url: questionData.image_url,
+        media_url: questionData.media_url,
+        media_type: questionData.media_type,
         category: questionData.category,
         difficulty: questionData.difficulty
       };
@@ -511,7 +512,8 @@ function showNextQuizQuestion() {
       D: questionData.option_d
     },
     timeLimit: questionData.time_limit,
-    image_url: questionData.image_url,
+    media_url: questionData.media_url,
+    media_type: questionData.media_type,
     category: questionData.category,
     difficulty: questionData.difficulty,
     questionNumber: gameState.currentQuizQuestionIndex + 1,
