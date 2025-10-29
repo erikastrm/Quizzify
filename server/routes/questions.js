@@ -102,7 +102,7 @@ router.post('/', async (req, res) => {
   try {
     // Här skulle vi kontrollera admin-rättigheter
     
-    const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url } = req.body;
+    const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url, media_url, media_type } = req.body;
 
     // Validering
     if (!question || !option_a || !option_b || !option_c || !option_d || !correct_answer) {
@@ -129,7 +129,9 @@ router.post('/', async (req, res) => {
       time_limit: time_limit || 30,
       category: category || 'Allmän',
       difficulty: difficulty || 'medium',
-      image_url: image_url || null
+      image_url: image_url || null,
+      media_url: media_url || null,
+      media_type: media_type || 'none'
     });
 
     res.status(201).json({
@@ -156,7 +158,7 @@ router.put('/:id', async (req, res) => {
     // Här skulle vi kontrollera admin-rättigheter
     
     const questionId = parseInt(req.params.id);
-    const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url } = req.body;
+    const { question, option_a, option_b, option_c, option_d, correct_answer, time_limit, category, difficulty, image_url, media_url, media_type } = req.body;
 
     // Kontrollera att frågan finns
     const existingQuestion = await questions.getById(questionId);
@@ -192,7 +194,9 @@ router.put('/:id', async (req, res) => {
       time_limit: time_limit || 30,
       category: category || 'Allmän',
       difficulty: difficulty || 'medium',
-      image_url: image_url || null
+      image_url: image_url || null,
+      media_url: media_url || null,
+      media_type: media_type || 'none'
     });
 
     if (result.changes === 0) {

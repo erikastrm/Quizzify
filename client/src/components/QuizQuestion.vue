@@ -60,7 +60,7 @@
       </div>
 
       <!-- Media (bild, ljud eller video) -->
-      <div v-if="question.media_url" class="question-media">
+      <div v-if="question.media_url && question.media_type && question.media_type !== 'none'" class="question-media">
         <!-- Bild -->
         <div v-if="question.media_type === 'image'" class="media-image">
           <img :src="getMediaUrl(question.media_url)" :alt="question.question" />
