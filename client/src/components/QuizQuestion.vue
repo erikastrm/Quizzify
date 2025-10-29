@@ -68,12 +68,12 @@
         
         <!-- Ljud -->
         <div v-else-if="question.media_type === 'audio'" class="media-audio">
-          <audio :src="getMediaUrl(question.media_url)" controls></audio>
+          <audio :src="getMediaUrl(question.media_url)" controls autoplay></audio>
         </div>
         
         <!-- Video -->
         <div v-else-if="question.media_type === 'video'" class="media-video">
-          <video :src="getMediaUrl(question.media_url)" controls></video>
+          <video :src="getMediaUrl(question.media_url)" controls autoplay></video>
         </div>
       </div>
 
